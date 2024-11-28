@@ -1,0 +1,78 @@
+!pip install pennylane tensorflow keras qiskit
+
+import pennylane as qml
+from pennylane import numpy as np
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from tensorflow import keras
+import tensorflow_datasets as tfds
+
+
+# Load the Brakhis dataset
+# Download the dataset from a trusted source
+# and replace 'path/to/brakhis/dataset' with the actual path
+
+# Assuming the Brakhis dataset is preprocessed and loaded as NumPy arrays:
+# x_train: training images
+# y_train: training labels (0 for benign, 1 for malignant)
+# x_test: testing images
+# y_test: testing labels
+
+# Preprocess data (adjust according to your data format)
+# For example:
+# x_train = x_train.astype('float32') / 255.0
+# x_test = x_test.astype('float32') / 255.0
+
+# Add channel dimension (if necessary)
+# x_train = x_train.reshape(x_train.shape[0], x_train.shape[1], x_train.shape[2], 1)
+# x_test = x_test.reshape(x_test.shape[0], x_test.shape[1], x_test.shape[2], 1)
+
+
+
+# Define the quantum circuit
+n_qubits = 4
+dev = qml.device('default.qubit', wires=n_qubits)
+
+@qml.qnode(dev)
+def quantum_circuit(inputs):
+    for i in range(n_qubits):
+        qml.RX(inputs[i], wires=i)
+    for i in range(n_qubits - 1):
+        qml.CNOT(wires=[i, i + 1])
+    return [qml.expval(qml.PauliZ(i)) for i in range(n_qubits)]
+
+# Define the quantum layer
+class QuantumLayer(layers.Layer):
+    def __init__(self, n_qubits, **kwargs):
+        super(QuantumLayer, self).__init__(**kwargs)
+        self.n_qubits = n_qubits
+
+    def call(self, inputs):
+        # Use tf.map_fn to apply the quantum circuit to each element in the batch
+        # This avoids using a Python loop with a symbolic tensor
+        quantum_output = tf.map_fn(lambda x: quantum_circuit(x[:self.n_qubits]), inputs) 
+        return quantum_output
+
+# Define the hybrid QCNN model
+def create_hybrid_qcnn(input_shape):
+    model = models.Sequential([
+        layers.Conv2D(32, kernel_size=(3, 3), activation='relu', input_shape=input_shape),
+        layers.MaxPooling2D(pool_size=(2, 2)),
+        layers.Flatten(),
+        QuantumLayer(n_qubits),
+        layers.Dense(1, activation='sigmoid')  # Adjust output units for Brakhis dataset (binary classification)
+    ])
+    return model
+
+# Create the model
+# Assuming x_train.shape[1:] provides the image dimensions
+# model = create_hybrid_qcnn(x_train.shape[1:])
+
+
+# Compile the model
+# model.compile(optimizer='adam',
+#               loss='binary_crossentropy',  # Use binary_crossentropy for Brakhis dataset
+#               metrics=['accuracy'])
+
+# Train the model
+# model.fit(x_train
